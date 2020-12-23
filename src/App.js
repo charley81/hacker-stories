@@ -1,5 +1,13 @@
-import React, { useState, useEffect, useRef, useReducer } from 'react'
-import './App.css'
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useReducer,
+  useCallback,
+} from 'react'
+import axios from 'axios'
+
+const API_ENDPOINT = 'https://hn.algolia.com/api/v1/search?query='
 
 const useSemiPersistentState = (key, initialState) => {
   const [value, setValue] = useState(localStorage.getItem(key) || initialState)
@@ -44,29 +52,37 @@ const storiesReducer = (state, action) => {
   }
 }
 
-const API_ENDPOINT = 'https://hn.algolia.com/api/v1/search?query='
-
 const App = () => {
   const [searchTerm, setSearchTerm] = useSemiPersistentState('search', 'React')
+
+  const [url, setUrl] = useState(`${API_ENDPOINT}${searchTerm}`)
+
   const [stories, dispatchStories] = useReducer(storiesReducer, {
     data: [],
     isLoading: false,
     isError: false,
   })
 
-  useEffect(() => {
+  const handleFetchStories = useCallback(async () => {
     dispatchStories({ type: 'STORIES_FETCH_INIT' })
 
-    fetch(`${API_ENDPOINT}react`)
-      .then(response => response.json())
-      .then(result => {
-        dispatchStories({
-          type: 'STORIES_FETCH_SUCCESS',
-          payload: result.hits,
-        })
+    try {
+      const result = await axios.get(url)
+
+      dispatchStories({
+        type: 'STORIES_FETCH_SUCCESS',
+        payload: result.data.hits,
       })
-      .catch(() => dispatchStories({ type: 'STORIES_FETCH_FAILURE' }))
-  }, [])
+    } catch {
+      dispatchStories({
+        type: 'STORIES_FETCH_FAILURE',
+      })
+    }
+  }, [url])
+
+  useEffect(() => {
+    handleFetchStories()
+  }, [handleFetchStories])
 
   const handleRemoveStory = item => {
     const newStories = stories.filter(story => item.objectID !== story.objectID)
@@ -77,33 +93,39 @@ const App = () => {
     })
   }
 
-  const handleSearch = e => {
+  const handleSearchInput = e => {
     setSearchTerm(e.target.value)
   }
 
-  const searchedStories = stories.data.filter(story =>
-    story.title.toLowerCase().includes(searchTerm.toLocaleLowerCase())
-  )
+  const handleSearchSubmit = () => {
+    setUrl(`${API_ENDPOINT}${searchTerm}`)
+  }
 
   return (
-    <div className="App">
-      <h1>Hacker Stories</h1>
+    <div>
+      <h1>My Hacker Stories</h1>
+
       <InputWithLabel
         id="search"
-        label="Search"
-        searchTerm={searchTerm}
-        onInputChange={handleSearch}
         value={searchTerm}
         isFocused
+        onInputChange={handleSearchInput}
       >
         <strong>Search:</strong>
       </InputWithLabel>
+
+      <button type="button" disabled={!searchTerm} onClick={handleSearchSubmit}>
+        Submit
+      </button>
+
       <hr />
+
       {stories.isError && <p>Something went wrong ...</p>}
+
       {stories.isLoading ? (
-        <p>Loading...</p>
+        <p>Loading ...</p>
       ) : (
-        <List list={searchedStories} onRemoveItem={handleRemoveStory} />
+        <List list={stories.data} onRemoveItem={handleRemoveStory} />
       )}
     </div>
   )
